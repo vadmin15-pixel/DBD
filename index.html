@@ -6,6 +6,8 @@
     <title>Happy Birthday!</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <!-- Load FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
 /* Custom styles extending Tailwind */
 body {
@@ -206,9 +208,7 @@ input:checked ~ #toggle-dot {
     100% { transform: translateY(-100vh) rotate(360deg) scale(1.2); opacity: 0; }
 }
 
-</style>
-    <!-- Load FontAwesome for icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    </style>
 </head>
 <body class="bg-black text-white overflow-hidden h-screen w-screen m-0 select-none font-sans">
 
@@ -1198,8 +1198,7 @@ function typeWriterEffect(text) {
 
     function type() {
         if (i < text.length) {
-            if(text.charAt(i) === '
-') {
+            if(text.charAt(i) === '\n') {
                 el.innerHTML += '<br>';
             } else {
                 el.innerHTML += text.charAt(i);
@@ -1211,6 +1210,6 @@ function typeWriterEffect(text) {
     type();
 }
 
-</script>
+    </script>
 </body>
 </html>

@@ -6,6 +6,8 @@
     <title>Happy Birthday!</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.4.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.4.0/firebase-database-compat.js"></script>
     <!-- Load FontAwesome for icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -502,10 +504,24 @@ const DEFAULT_CONFIG = {
 
 const MASTER_PASSCODE = "112233";
 
+const firebaseConfig = {
+  apiKey: "AIzaSyDl7r40TCKPiAg9ry6_bdsH8t13YQo3QzA",
+  authDomain: "dbdd-a20a2.firebaseapp.com",
+  projectId: "dbdd-a20a2",
+  storageBucket: "dbdd-a20a2.firebasestorage.app",
+  messagingSenderId: "764016691272",
+  appId: "1:764016691272:web:b2f21079684d59e663b07d",
+  measurementId: "G-P95JPRPLPR"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
 // State
 let config = {};
 let countdownInterval;
 let currentStage = 1;
+let targetDate; // Global reference for updating dynamically
+let isDbInitialized = false;
 
 // Audio
 const chimeAudio = document.getElementById('chime-audio');
@@ -516,7 +532,6 @@ let tapCount = 0;
 let tapTimeout;
 document.addEventListener('DOMContentLoaded', () => {
     loadConfig();
-    initStage1();
     
     // Global keyboard shortcut for Admin (Ctrl+Shift+A or Cmd+Shift+A)
     document.addEventListener('keydown', (e) => {
@@ -543,25 +558,43 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function loadConfig() {
-    try {
-        const saved = localStorage.getItem('birthdayConfig');
-        if (saved) {
-            config = { ...DEFAULT_CONFIG, ...JSON.parse(saved) };
+    db.ref('config').on('value', (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+            config = { ...DEFAULT_CONFIG, ...data };
         } else {
             config = { ...DEFAULT_CONFIG };
         }
-    } catch (e) {
-        console.warn("LocalStorage access denied/failed.", e);
-        config = { ...DEFAULT_CONFIG };
-    }
+
+        if (!isDbInitialized) {
+            isDbInitialized = true;
+            initStage1();
+        } else {
+            // Live Update if admin panel is open
+            if (!document.getElementById('admin-panel').classList.contains('hidden')) {
+                populateAdminForm();
+            }
+            
+            // Live Update timer if in stage 1
+            if (currentStage === 1) {
+                targetDate = new Date(`${config.date}T${config.time}`).getTime();
+                const previewBtn = document.getElementById('preview-bypass-btn');
+                if (config.previewMode) {
+                    previewBtn.classList.remove('hidden');
+                    document.getElementById('countdown-title').innerText = "PREVIEW MODE";
+                    document.getElementById('countdown-title').classList.add('text-cyan-400');
+                } else {
+                    previewBtn.classList.add('hidden');
+                    document.getElementById('countdown-title').innerText = "The Wait Is Almost Over";
+                    document.getElementById('countdown-title').classList.remove('text-cyan-400');
+                }
+            }
+        }
+    });
 }
 
 function saveConfig() {
-    try {
-        localStorage.setItem('birthdayConfig', JSON.stringify(config));
-    } catch (e) {
-        console.warn("LocalStorage save denied/failed.", e);
-    }
+    db.ref('config').set(config).catch(err => console.error("Firebase save failed", err));
 }
 
 // --- ADMIN PANEL LOGIC ---
@@ -713,7 +746,7 @@ document.getElementById('admin-reset').addEventListener('click', () => {
 function initStage1() {
     const targetDateStr = `${config.date}T${config.time}`;
     // Creates a Date object in the local timezone of the device viewing it
-    const targetDate = new Date(targetDateStr).getTime();
+    targetDate = new Date(targetDateStr).getTime();
     
     const previewBtn = document.getElementById('preview-bypass-btn');
     if (config.previewMode) {
@@ -748,14 +781,13 @@ function initStage1() {
         document.getElementById('t-secs').innerText = seconds.toString().padStart(2, '0');
     }
 
-    if (!config.previewMode && targetDate > new Date().getTime()) {
+    if (targetDate > new Date().getTime()) {
         countdownInterval = setInterval(updateTimer, 1000);
         updateTimer();
     } else if (!config.previewMode) {
         // If time is already past and not in preview mode, just open immediately
         triggerCurtainOpen();
-    } else if (config.previewMode) {
-        // Just populate the numbers once for preview mode
+    } else {
         updateTimer();
     }
 }

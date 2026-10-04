@@ -511,7 +511,8 @@ const firebaseConfig = {
   storageBucket: "dbdd-a20a2.firebasestorage.app",
   messagingSenderId: "764016691272",
   appId: "1:764016691272:web:b2f21079684d59e663b07d",
-  measurementId: "G-P95JPRPLPR"
+  measurementId: "G-P95JPRPLPR",
+  databaseURL: "https://dbdd-a20a2-default-rtdb.firebaseio.com"
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
@@ -557,44 +558,63 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-function loadConfig() {
-    db.ref('config').on('value', (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-            config = { ...DEFAULT_CONFIG, ...data };
-        } else {
-            config = { ...DEFAULT_CONFIG };
-        }
+function fallbackToLocal() {
+    console.warn("Falling back to local defaults due to Firebase issue.");
+    config = { ...DEFAULT_CONFIG };
+    if (!isDbInitialized) {
+        isDbInitialized = true;
+        initStage1();
+    }
+}
 
-        if (!isDbInitialized) {
-            isDbInitialized = true;
-            initStage1();
-        } else {
-            // Live Update if admin panel is open
-            if (!document.getElementById('admin-panel').classList.contains('hidden')) {
-                populateAdminForm();
+function loadConfig() {
+    try {
+        db.ref('config').on('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                config = { ...DEFAULT_CONFIG, ...data };
+            } else {
+                config = { ...DEFAULT_CONFIG };
             }
-            
-            // Live Update timer if in stage 1
-            if (currentStage === 1) {
-                targetDate = new Date(`${config.date}T${config.time}`).getTime();
-                const previewBtn = document.getElementById('preview-bypass-btn');
-                if (config.previewMode) {
-                    previewBtn.classList.remove('hidden');
-                    document.getElementById('countdown-title').innerText = "PREVIEW MODE";
-                    document.getElementById('countdown-title').classList.add('text-cyan-400');
-                } else {
-                    previewBtn.classList.add('hidden');
-                    document.getElementById('countdown-title').innerText = "The Wait Is Almost Over";
-                    document.getElementById('countdown-title').classList.remove('text-cyan-400');
+
+            if (!isDbInitialized) {
+                isDbInitialized = true;
+                initStage1();
+            } else {
+                // Live Update if admin panel is open
+                if (!document.getElementById('admin-panel').classList.contains('hidden')) {
+                    populateAdminForm();
+                }
+                
+                // Live Update timer if in stage 1
+                if (currentStage === 1) {
+                    targetDate = new Date(`${config.date}T${config.time}`).getTime();
+                    const previewBtn = document.getElementById('preview-bypass-btn');
+                    if (config.previewMode) {
+                        previewBtn.classList.remove('hidden');
+                        document.getElementById('countdown-title').innerText = "PREVIEW MODE";
+                        document.getElementById('countdown-title').classList.add('text-cyan-400');
+                    } else {
+                        previewBtn.classList.add('hidden');
+                        document.getElementById('countdown-title').innerText = "The Wait Is Almost Over";
+                        document.getElementById('countdown-title').classList.remove('text-cyan-400');
+                    }
                 }
             }
-        }
-    });
+        }, (error) => {
+            console.error("Firebase read denied/failed: ", error);
+            fallbackToLocal();
+        });
+    } catch (e) {
+        console.error("Firebase init failed: ", e);
+        fallbackToLocal();
+    }
 }
 
 function saveConfig() {
-    db.ref('config').set(config).catch(err => console.error("Firebase save failed", err));
+    try {
+        db.ref('config').set(config).catch(err => console.error("Firebase save failed", err));
+    } catch (e) {}
 }
 
 // --- ADMIN PANEL LOGIC ---
@@ -749,9 +769,11 @@ function initStage1() {
     targetDate = new Date(targetDateStr).getTime();
     
     const previewBtn = document.getElementById('preview-bypass-btn');
+    // Unconditionally add listener so it works if toggled on later
+    previewBtn.addEventListener('click', triggerCurtainOpen);
+    
     if (config.previewMode) {
         previewBtn.classList.remove('hidden');
-        previewBtn.addEventListener('click', triggerCurtainOpen);
         document.getElementById('countdown-title').innerText = "PREVIEW MODE";
         document.getElementById('countdown-title').classList.add('text-cyan-400');
     }
@@ -781,15 +803,11 @@ function initStage1() {
         document.getElementById('t-secs').innerText = seconds.toString().padStart(2, '0');
     }
 
-    if (targetDate > new Date().getTime()) {
+    // Unconditionally start interval so timer never freezes visually
+    if (!countdownInterval) {
         countdownInterval = setInterval(updateTimer, 1000);
-        updateTimer();
-    } else if (!config.previewMode) {
-        // If time is already past and not in preview mode, just open immediately
-        triggerCurtainOpen();
-    } else {
-        updateTimer();
     }
+    updateTimer();
 }
 
 function triggerCurtainOpen() {
